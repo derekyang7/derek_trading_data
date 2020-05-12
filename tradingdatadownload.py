@@ -3,7 +3,7 @@ import pandas as pd
 import json
 #https://pypi.org/project/yahooquery
 from yahooquery import Ticker
-
+import datetime
 import pyodbc
 from sqlalchemy import create_engine
 import sys, getopt
@@ -17,6 +17,28 @@ def saveToTable(df, tableName, cnxn, engine):
     cursor.close()
     
     df.to_sql(tableName, engine, if_exists='append',schema='dbo', index=True)
+
+def downloadDaily(ticker_symbols, cnxn, engine):
+    
+    #cursor = cnxn.cursor()
+    #cursor.execute('Delete Daily')
+    #cursor.commit()
+    #cursor.close()
+
+    for symbol in ticker_symbols:
+        ticker = Ticker(symbol)
+        #daily = ticker.history(period='1y', interval='1d')
+        #print('Download daily completed')
+
+        #daily.to_sql('Daily', engine, if_exists='append',schema='dbo', index=True)
+
+        #print('Saved to table daily')
+
+        df_options = ticker.option_chain
+        df_options['createDate'] = datetime.date.today()
+
+        df_options.to_sql('Option', engine, if_exists='append',schema='dbo', index=True)
+
 
 def main(argv):
     interval = ''
@@ -32,7 +54,7 @@ def main(argv):
             print('tradingdatadownload.py -i <interval>')
             sys.exit()
         elif opt in ("-i", "--interval"):
-            interval = arg
+            interval = arg.lstrip()
 
     if interval == '':
         print('tradingdatadownload.py -i <interval>')
@@ -41,8 +63,8 @@ def main(argv):
 
     #cnxn = pyodbc.connect("dsn=azure-trading;UID=sqladmin;PWD=Duoduo88")
     #engine = create_engine("mssql+pyodbc://sqladmin:Duoduo88@azure-trading")
-    cnxn = pyodbc.connect("dsn=Trading")
-    engine = create_engine("mssql+pyodbc://Trading")
+    cnxn = pyodbc.connect("DRIVER={ODBC Driver 17 for SQL Server};SERVER=192.168.1.19;UID=sa;PWD=Duoduo88;database=trading")
+    engine = create_engine("mssql+pyodbc://sa:Duoduo88@192.168.1.19/trading?driver=ODBC+Driver+17+for+SQL+Server")
     sym = pd.read_sql_table("Symbol", engine)
     ticker_symbols = sym['Symbol'].values.tolist()
     print(ticker_symbols)
@@ -55,10 +77,9 @@ def main(argv):
         print('Saved to table weekly')
 
     if interval == 'daily':
-        daily = tickers.history(period='1y', interval='1d')
-        print('Download daily completed')
+        daily = tickers.history('1mo', interval='1d')
         saveToTable(daily, 'Daily', cnxn, engine)
-        print('Saved to table daily')
+        downloadDaily(ticker_symbols, cnxn, engine)
 
     if interval == 'hourly':
         hourly = tickers.history(period='1mo', interval='1h')
