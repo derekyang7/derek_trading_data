@@ -20,24 +20,39 @@ def saveToTable(df, tableName, cnxn, engine):
 
 def downloadDaily(ticker_symbols, cnxn, engine):
     
-    #cursor = cnxn.cursor()
-    #cursor.execute('Delete Daily')
-    #cursor.commit()
-    #cursor.close()
+    cursor = cnxn.cursor()
+    cursor.execute('EXEC spProcessDailyData')
+    cursor.commit()
+    cursor.close()
 
     for symbol in ticker_symbols:
         ticker = Ticker(symbol)
-        #daily = ticker.history(period='1y', interval='1d')
-        #print('Download daily completed')
+        daily = ticker.history(period='1y', interval='1d')
+        print(f'Downloading {symbol}.')
 
-        #daily.to_sql('Daily', engine, if_exists='append',schema='dbo', index=True)
+        # for single symbol dowload, add column symbol and date as indexes
+        daily['symbol'] = symbol
+        daily.reset_index(inplace=True)        
+        daily.rename(columns={'index': 'date'}, inplace=True)
+        daily.set_index(['symbol','date'], inplace=True)
+
+        daily.to_sql('tmpDaily', engine, if_exists='append',schema='dbo', index=True)
 
         #print('Saved to table daily')
 
         df_options = ticker.option_chain
-        df_options['createDate'] = datetime.date.today()
 
-        df_options.to_sql('Option', engine, if_exists='append',schema='dbo', index=True)
+        #check if it's string, if yes, there is no option chain
+
+        if isinstance(df_options, str) == False:
+            print(f'Downloading option chain {symbol}.')
+            df_options['createDate'] = datetime.date.today()
+            df_options.to_sql('Option', engine, if_exists='append',schema='dbo', index=True)
+
+    cursor = cnxn.cursor()
+    cursor.execute('EXEC spProcessDailyData')
+    cursor.commit()
+    cursor.close()
 
 
 def main(argv):
@@ -68,20 +83,22 @@ def main(argv):
     sym = pd.read_sql_table("Symbol", engine)
     ticker_symbols = sym['Symbol'].values.tolist()
     print(ticker_symbols)
-    tickers = Ticker(ticker_symbols)
+
 
     if interval == 'weekly':   
+        tickers = Ticker(ticker_symbols)
         weekly = tickers.history(period='5y', interval='1wk')
         print('Download weekly completed')
         saveToTable(weekly, 'Weekly', cnxn, engine)
         print('Saved to table weekly')
 
     if interval == 'daily':
-        daily = tickers.history('1mo', interval='1d')
-        saveToTable(daily, 'Daily', cnxn, engine)
+        #daily = tickers.history('1mo', interval='1d')
+        #saveToTable(daily, 'Daily', cnxn, engine)
         downloadDaily(ticker_symbols, cnxn, engine)
 
     if interval == 'hourly':
+        tickers = Ticker(ticker_symbols)
         hourly = tickers.history(period='1mo', interval='1h')
         print('Download hourly completed')
         saveToTable(hourly, 'Hourly', cnxn, engine)
